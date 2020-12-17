@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<layout version="0.1.0">
+	<mylerz_shipment_adminhtml_neighborhoods_index>
+		<reference name="content">
+			<block type="mylerz_shipment/adminhtml_neighborhoods" name="neighborhoods"/>
+		</reference>
+	</mylerz_shipment_adminhtml_neighborhoods_index>
+	<mylerz_shipment_adminhtml_shipmentbackend_index>
+		<reference name="content">
+			<block type="mylerz_shipment/adminhtml_shipmentbackend" name="shipmentbackend" template="shipment/shipmentbackend.phtml"/>
+		</reference>
+	</mylerz_shipment_adminhtml_shipmentbackend_index>
+
+	<adminhtml_sales_order_view>
+		<reference name="head">
+			<action method="addItem">
+				<type>skin_js</type>
+				<name>mylerz/js/mylerz.js</name>
+			</action>
+			<action method="addItem">
+				<type>skin_css</type>
+				<name>mylerz/css/mylerz.css</name>
+			</action>
+		</reference>
+		<reference name="before_body_end">
+			<block type="Mylerz_Shipment_Block_Adminhtml_Popup" name="mylerz.popup" template="mylerz/popup.phtml" />
+		</reference>
+	</adminhtml_sales_order_view>
+</layout>

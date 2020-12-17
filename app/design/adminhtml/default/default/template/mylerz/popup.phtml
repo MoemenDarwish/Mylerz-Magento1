@@ -1,0 +1,929 @@
+
+<?php
+/**
+ * 
+ * @category    Mylerz
+ * @package     Mylerz_Shipment
+ * @author      Moemen Darwish <moo.alyan@gmail.com>
+ */
+?>
+
+<?php 
+$_order = Mage::getModel('sales/order')->load($this->getRequest()->getParam('order_id'));
+$shipping 	= $_order->getShippingAddress();
+$customerId = $_order->getCustomerId();
+$customer 	= Mage::getModel('customer/customer')->load($customerId);
+$countryCollection 	= Mage::getModel('directory/country_api')->items();
+$payment			= $_order->getPayment();
+
+	//calculating total weight of current order
+	$totalWeight 	= 0;
+	$itemscount 	= 0;
+	$isShipped=false;
+	$itemsv = $_order->getAllVisibleItems();
+	foreach($itemsv as $itemvv){
+		if($itemvv->getWeight() != 0){
+			$weight =  $itemvv->getWeight()*$itemvv->getQtyOrdered();
+		} else {
+			$weight =  0.5*$itemvv->getQtyOrdered();
+		}
+		$totalWeight 	+= $weight;
+		if($itemvv->getQtyOrdered() > $itemvv->getQtyShipped()){
+			$itemscount += $itemvv->getQtyOrdered() - $itemvv->getQtyShipped();
+		}else if($itemvv->getQtyOrdered()==$itemvv->getQtyShipped()){
+			$isShipped=true;
+			$itemscount+=$itemvv->getQtyOrdered();
+		}
+	}
+	$state = "";
+	if(($shipping->getData('region_id')) && ($shipping->getCountry() == 'US')){
+		$region = Mage::getModel('directory/region')->load($shipping->getData('region_id'));
+		$state = $region->getName();
+	}
+	else{
+		$state = $shipping->getData('region');
+	}
+
+	$billing_state = "";
+	if($shipping->getData('region_id')){
+		$region = Mage::getModel('directory/region')->load($shipping->getData('region_id'));
+		$billing_state = $region->getName();
+	}
+	else{
+		$billing_state = $shipping->getData('region');
+	}
+	$formSession=Mage::getSingleton('adminhtml/session');
+	$formData=$formSession->getData('form_data');
+	$session=false;
+	Mage::getSingleton('core/session')->setPreviousUrl($this->helper('core/url')->getCurrentUrl());
+	if(count($formData)>0){ $session=true; }
+
+?>
+
+
+<div id="mylerz_overlay">
+<div id="mylerz_shipment_creation">
+			
+	<form id="mylerz_shipment" method="post" action="<?php echo $this->getUrl('admin_mylerz/adminhtml_shipment/post'); ?>" enctype="multipart/form-data">
+		<input type="hidden" name="mylerz_shipment_referer" value="<?php echo $this->helper('core/url')->getCurrentUrl(); ?>" />
+		<input name="form_key" type="hidden" value="<?php echo Mage::getSingleton('core/session')->getFormKey() ?>" />
+		<input name="mylerz_shipment_shipper_account" type="hidden" value="<?php //echo Mage::getStoreConfig('mylerzsettings/settings/account_number'); ?>" />
+		<input name="mylerz_shipment_original_reference" type="hidden" value="<?php echo $_order->getIncrementId() ?>" />
+		<FIELDSET class="mylerz_shipment_creation_fieldset_big" id="mylerz_shipment_creation_general_info">
+
+			<div id="general_details" class="mylerz_shipment_creation_part">
+				<div id="mylerz_shipment_creation_logo"><img src="/skin/adminhtml/default/default/mylerz/images/logo.webp" /></div>
+			</div>
+
+		</FIELDSET>
+		<div id="mylerz_messages"></div>
+		<FIELDSET class="mylerz_shipment_creation_fieldset" style="display:none;">
+			<legend>Shipper Details</legend>
+			<div id="shipper_details" class="mylerz_shipment_creation_part">
+				<div class="text_short">
+					<label>Reference</label><input class="number" type="text" name="mylerz_shipment_shipper_reference" value="<?php echo $_order->getIncrementId() ?>"/>
+				</div>
+				<div class="text_short">
+					<?php $_name=($session)?$formData['mylerz_shipment_shipper_name']:Mage::getStoreConfig('mylerzsettings/shipperdetail/name');?>
+					<label>Name</label><input type="text" class="required" id="mylerz_shipment_shipper_name" name="mylerz_shipment_shipper_name" value="<?php echo $_name; ?>"/>
+				</div>
+				<div class="text_short">
+					<?php $_email=($session)?$formData['mylerz_shipment_shipper_email']:Mage::getStoreConfig('mylerzsettings/shipperdetail/email');?>
+					<label>Email</label><input type="text" class="required email" id="mylerz_shipment_shipper_email" name="mylerz_shipment_shipper_email" value="<?php echo $_email; ?>"/>
+				</div>
+				<div class="text_short">
+					
+					<?php $company_name = isset($billing) ? $billing->getData('company') : '';?>
+					<?php $_company=($session)?$formData['mylerz_shipment_shipper_company']:Mage::getStoreConfig('mylerzsettings/shipperdetail/company');?>
+					<label>Company</label><input type="text" id="mylerz_shipment_shipper_company" name="mylerz_shipment_shipper_company" value="<?php echo $_company; ?>"/>
+				</div>
+				<div class="text_short">
+					<?php $_street=($session)?$formData['mylerz_shipment_shipper_street']:Mage::getStoreConfig('mylerzsettings/shipperdetail/address');?>
+					<label>Address</label><textarea rows="4" class="required" cols="26" type="text" id="mylerz_shipment_shipper_street" name="mylerz_shipment_shipper_street"><?php echo $_street; ?></textarea>
+				</div>
+				<div class="text_short">
+					<label>Country</label>
+					<?php $_country=($session)?$formData['mylerz_shipment_shipper_country']:Mage::getStoreConfig('mylerzsettings/shipperdetail/country');?>
+					<select class="mylerz_countries validate-select" id="mylerz_shipment_shipper_country" name="mylerz_shipment_shipper_country">
+						<?php
+							foreach($countryCollection as $country) {
+								if( $country['country_id'] == 'EG'){
+								?>
+								<option value="<?php echo $country['country_id'] ?>" <?php if($_country){ echo ($_country == $country['country_id']) ? 'selected="selected"' : ''; }?> ><?php echo $country['name'] ?></option>
+								<?php
+							}}
+						?>
+					</select>
+				</div>
+
+
+				<!-- <div class="text_short">
+					<?php //$_postalcode=($session)?$formData['mylerz_shipment_shipper_postal']:Mage::getStoreConfig('mylerzsettings/shipperdetail/postalcode');?>
+					<label>Postal Code</label><input class="" type="text" id="mylerz_shipment_shipper_postal" name="mylerz_shipment_shipper_postal" value="<?php echo $_postalcode; ?>"/>
+				</div> -->
+				<div class="text_short">
+					<label>Neighborhood</label><input type="text" id="mylerz_shipment_shipper_state" name="mylerz_shipment_shipper_state" value="<?php echo $_state; ?>" />
+				</div>
+				<div class="text_short">
+					<?php $_phone=($session)?$formData['mylerz_shipment_shipper_phone']:Mage::getStoreConfig('mylerzsettings/shipperdetail/phone');?>
+					<label>Phone</label><input class="required" type="text" id="mylerz_shipment_shipper_phone" name="mylerz_shipment_shipper_phone" value="<?php echo $_phone; ?>" />
+				</div>
+			</div>
+		</FIELDSET>
+		<FIELDSET class="mylerz_shipment_creation_fieldset" style="width:620px;">
+			<legend>Receiver Details</legend>
+			<div id="receiver_details" class="mylerz_shipment_creation_part">
+				<div class="text_short">
+					<label>Reference</label><input class="number" type="text" id="mylerz_shipment_receiver_reference" name="mylerz_shipment_receiver_reference" value="<?php echo $_order->getIncrementId() ?>"/>
+				</div>
+				<div class="text_short">
+					<?php $_name=($shipping) ? $shipping->getName():'';?>
+					<?php $_name=($session)?$formData['mylerz_shipment_receiver_name']:$_name;?>
+					<label>Name</label><input class="required" type="text" id="mylerz_shipment_receiver_name" name="mylerz_shipment_receiver_name" value="<?php echo $_name; ?>"/>
+				</div>
+				<div class="text_short">
+					<?php $_email=($customer->getEmail()) ? $customer->getEmail():$_order->getData('customer_email');?>
+					<?php $_email=($session)?$formData['mylerz_shipment_receiver_email']:$_email;?>
+					<label>Email</label><input class="email required" type="text" id="mylerz_shipment_receiver_email" name="mylerz_shipment_receiver_email" value="<?php echo $_email; ?>"/>
+				</div>
+				<div class="text_short">
+					<?php $company_name=($company_name) ? $company_name:'';?>
+					<?php $company_name=(empty($company_name) and $shipping) ?$shipping->getName() :$company_name;?>
+					<?php $company_name = ($shipping) ? $shipping->getData('company') : '';?>
+					<?php $company_name=($session)?$formData['mylerz_shipment_receiver_company']:$company_name;?>				
+					<?php if(Mage::getStoreConfig('mylerzsettings/config/sandbox_flag')==1){ 
+					$company_name=(empty($company_name) and $shipping) ?$shipping->getName() :$company_name; 
+					} ?>
+					<label>Company</label><input type="text" id="mylerz_shipment_receiver_company" name="mylerz_shipment_receiver_company" value="<?php echo $company_name ?>"/>
+				</div>
+				<div class="text_short">
+					<?php $street=($shipping) ? $shipping->getData('street'):'';?>
+					<?php $street=($session)?$formData['mylerz_shipment_receiver_street']:$street;?>
+					<label>Address</label><textarea  class="required" rows="4" cols="26" type="text" id="mylerz_shipment_receiver_street" name="mylerz_shipment_receiver_street"><?php echo $street; ?></textarea>
+				</div>
+				<div class="text_short">
+					<label>Country</label>
+						<?php $_country=($shipping) ? $shipping->getCountry():'';?>
+						<?php $_country=($session)?$formData['mylerz_shipment_receiver_country']:$_country;?>
+						<select class="mylerz_countries" id="mylerz_shipment_receiver_country" name="mylerz_shipment_receiver_country">
+							<?php
+								foreach($countryCollection as $country) {
+									if( $country['country_id'] == 'EG'){
+									?>
+									<option value="<?php echo $country['country_id'] ?>" <?php echo ($_country == $country['country_id']) ? 'selected="selected"' : '';?> ><?php echo $country['name'] ?></option>
+									<?php
+								}}
+							?>
+						</select>
+				</div>
+				<div class="text_short">
+					<?php //$_city=($shipping) ? $shipping->getData('city'):'';?>
+						<?php //$_city=($session)?$formData['mylerz_shipment_receiver_city']:$_city;?>
+					<label>City</label>
+					<select class="mylerz_countries validate-select" id="mylerz_shipment_shipper_city" name="mylerz_shipment_shipper_city">
+						<?php
+							foreach($this->getcitis() as $city_code => $city_label) {
+								?>
+								<option value="<?php echo $city_code ?>" ><?php echo $city_label ?></option>
+								<?php
+							}
+						?>
+					</select>
+				</div>
+				<!-- <div class="text_short">
+					<?php //$_postcode=($shipping) ? $shipping->getData('postcode'):'';?>
+					<?php //$_postcode=($session)?$formData['mylerz_shipment_receiver_postal']:$_postcode;?>
+					<label>Postal Code</label><input type="text" class="" id="mylerz_shipment_receiver_postal" name="mylerz_shipment_receiver_postal" value="<?php echo $_postcode; ?>" />
+				</div> -->
+				<div class="text_short">
+					<?php //$_state=($shipping) ? $state:'';?>
+					<?php //$_state=($session)?$formData['mylerz_shipment_receiver_state']:$_state;?>
+					<label>Neighborhood</label>
+					<select class="mylerz_countries validate-select" id="mylerz_shipment_receiver_state" name="mylerz_shipment_receiver_state">
+					</select>
+				</div>
+				<div class="text_short">
+					<?php $_phone=($shipping) ? $shipping->getData('telephone'):'';?>
+					<?php $_phone=($session)?$formData['mylerz_shipment_receiver_phone']:$_phone;?>
+					<label>Phone</label><input class="required" type="text" id="mylerz_shipment_receiver_phone" name="mylerz_shipment_receiver_phone"  value="<?php echo $_phone; ?>"/>
+				</div>
+			</div>
+		</FIELDSET>
+		<div class="mylerz_clearer"></div>
+		<FIELDSET class="mylerz_shipment_creation_fieldset_big">
+			<legend>Shipment Information</legend>
+			<div id="shipment_infromation" class="mylerz_shipment_creation_part">
+				<div class="text_short" style="display:none">Total weight: <span id="order-total-weight"><?php echo number_format($totalWeight, 2); ?></span> KG</div>				
+				<div class="text_short">
+					<?php $_weight=($session)?$formData['order_weight']:$totalWeight;?>
+					<?php $_weightUnit=($session)?$formData['weight_unit']:'KG';?>
+					<label>Total weight:</label>
+					<input type="text" name="order_weight" value="<?php echo $_weight; ?>" class="fl width-60 mar-right-10" />
+					<select name="weight_unit" class="fl width-60">
+					<option value="KG" <?php echo ($_weightUnit=='KG')?'selected="selected"':'';?> >KG</option>
+					<option value="LB" <?php echo ($_weightUnit=='LB')?'selected="selected"':'';?>>LB</option>								
+					</select>
+				</div>
+				<div class="text_short">
+					<label>Reference</label><input type="text" id="mylerz_shipment_info_reference" name="mylerz_shipment_info_reference" value="<?php echo $_order->getIncrementId() ?>"/>
+				</div>
+				<div class="text_short">
+					<label>Service Type</label>
+					<select class="mylerz_all_options" id="mylerz_shipment_info_product_type" name="mylerz_shipment_info_product_type">
+						<option value="DTD">Door to door</option>
+						<option value="DTC">Door to counter</option>
+						<option value="CTD">Counter to door</option>
+						<option value="CTC">Counter to counter</option>
+					</select>
+					<div id="mylerz_shipment_info_service_type_div" style="display: none;"></div>
+				</div>
+
+
+				<div class="text_short">
+					<label>Service</label>
+					<select class="mylerz_all_options" id="mylerz_shipment_info_service_type" name="mylerz_shipment_info_service_type">
+						<option value="ND">Next Day</option>
+						<option value="SD">Same day</option>
+					</select>
+
+				</div>
+
+				<div class="text_short">
+					<label>Service Category</label>
+					<select class="" id="mylerz_shipment_info_payment_option" name="mylerz_shipment_info_payment_option">
+
+						<option value="DELIVERY">Forward delivery</option>
+						<option value="RETURN">Reverse delivery</option>
+
+					</select>
+
+				</div>
+
+				<div class="text_short">
+					<label>Payment Type</label>					
+					<?php $_type=($session)?$formData['mylerz_shipment_info_payment_type']:'';?>
+					<select class="mylerz_all_options" id="mylerz_shipment_info_payment_type" name="mylerz_shipment_info_payment_type">
+
+						<option value="PP">Pre-Paid</option>
+						<option value="COD">Cash-on-Delivery</option>
+						<option value="CC">CC-on-Delivery</option>
+
+					</select>
+					<div id="mylerz_shipment_info_service_type_div" style="display: none;"></div>
+				</div>
+				<div class="text_short">
+					<label>Address Category</label>
+					<select class="mylerz_all_options" id="mylerz_shipment_info_product_group" name="mylerz_shipment_info_product_group"  >
+
+						<option value="H">Home</option>
+						<option value="OF">Office</option>
+
+					</select>
+					<div id="mylerz_shipment_info_product_group_div" style="display: none;"></div>
+				</div>
+				<div class="text_short">
+					<label>Product Category</label>
+					<select class="" id="mylerz_shipment_info_product_category" name="mylerz_shipment_info_product_category">
+
+						<option value="food">Food</option>
+						<option value="Phones">Phones & Tablets</option>
+						<option value="Elec">Electronics</option>
+						<option value="Health">Makeup</option>
+						<option value="Fashion">Fashion</option>
+						<option value="Comp">Computing</option>
+						<option value="Baby">Baby Products</option>
+						<option value="Furn">Furniture</option>
+
+					</select>
+
+				</div>
+				<div class="text_short">
+					<?php $_amount=($_order->getPayment()->getMethodInstance()->getCode() != 'ccsave')?round($_order->getData('grand_total'), 2):'';?>
+					<?php $_amount=($session)?$formData['mylerz_shipment_info_cod_amount']:$_amount;?>
+					<?php if(Mage::getStoreConfig('mylerzsettings/config/sandbox_flag')==1){
+							$_amount ='';
+						} ?>
+					
+					<label>COD Amount</label><input class="" type="text" id="mylerz_shipment_info_cod_amount" name="mylerz_shipment_info_cod_amount"  value="<?php echo $_amount; ?>"/>
+				</div>
+
+				<!-- <div class="text_short">
+					<?php $_amount=($session)?$formData['mylerz_shipment_info_custom_amount']:'';?>
+					<label>Custom Amount</label><input class="" type="text" id="mylerz_shipment_info_custom_amount" name="mylerz_shipment_info_custom_amount"  value="<?php echo $_amount;?>"/>
+				</div> -->
+
+				<div class="text_short">
+					<?php $_code=($session)?$formData['mylerz_shipment_currency_code']:'';?>
+					<label>Currency</label><input type="text" class="" id="mylerz_shipment_currency_code" name="mylerz_shipment_currency_code" value="<?php echo $_code;?>"/>
+				</div>
+
+				<div class="text_short">				
+					<?php $_comment=($session)?$formData['mylerz_shipment_info_comment']:'';?>
+					<label>Comment</label><textarea  rows="4" cols="<?php if(strpos($_SERVER['HTTP_USER_AGENT'], 'Firefox')){ ?>29 <?php }else{ ?>35<?php } ?>" type="text" id="mylerz_shipment_info_comment" name="mylerz_shipment_info_comment"><?php echo $_comment; ?></textarea>
+				</div>
+
+				<!-- <div class="text_short">
+					<?php $_foreignhawb=($session)?$formData['mylerz_shipment_info_foreignhawb']:'';?>
+					<label>Foreign Shipment No</label><input class="" type="text" id="mylerz_shipment_info_foreignhawb" name="mylerz_shipment_info_foreignhawb"  value="<?php echo $_foreignhawb;?>"/>
+				</div> -->
+				<?php  ?>
+				<!-- <div class="text_short">
+					<label for="file1">Filename 1:</label>
+					<div id="file1_div" style="float: left;width: 145px;">
+						<input type="file" name="file1" id="file1" size="7">
+					</div>
+					<div style="float: right;">
+						<input type="button" name="filereset" id="filereset" value="Reset" style="width: 60px;height: 24px;"/>
+					</div>
+				</div>
+				<div class="text_short">
+					<label for="file2">Filename 2:</label>
+					<div id="file2_div" style="float: left;width: 145px;">
+						<input type="file" name="file2" id="file2" size="7">
+					</div>
+					<div style="float: right;">
+						<input type="button" name="file2reset" id="file2reset" value="Reset" style="width: 60px;height: 24px;"/>
+					</div>
+				</div>
+				<div class="text_short">
+					<label for="file">Filename 3:</label>
+					<div id="file3_div" style="float: left;width: 145px;">
+						<input type="file" name="file3" id="file3" size="7">
+					</div>
+					<div style="float: right;">
+						<input type="button" name="file3reset" id="file3reset" value="Reset" style="width: 60px;height: 24px;"/>
+					</div>
+				</div> -->
+				<?php  ?>
+				<div class="text_short">
+					<label>Description</label><textarea rows="4" cols="31" type="text" id="mylerz_shipment_description" name="mylerz_shipment_description" style="display: none;"><?php
+						$itemsnamecounter = 1;
+                        $item_supplier_id='';
+						foreach($_order->getAllVisibleItems() as $itemname){
+							if($itemname->getQtyOrdered() > $itemname->getQtyShipped()){
+								echo  $itemname->getId().' - '. trim($itemname->getName());
+							}
+							$itemsnamecounter++;
+							$supplier_different = false;
+							$atleast_item_shipped = false;
+							if(!$item_supplier_id){
+								$item_supplier_id =  $itemname->getUdropshipVendor();
+							} else {
+								if($item_supplier_id != $itemname->getUdropshipVendor()){
+									if(!$supplier_different){
+										$supplier_different = true;
+									}
+								}
+							}
+
+							if($itemname->getQtyOrdered() == $itemname->getQtyShipped()){
+								if(!$atleast_item_shipped){
+									$atleast_item_shipped = true;
+								}
+							}
+						}
+                        
+
+					?>
+					</textarea>
+					<div id="mylerz_shipment_description_div" style="    float: left;
+    font-size: 11px;
+    margin-bottom: 5px;
+    margin-top: 2px;
+    width: 202px;">
+					<?php
+						$itemsnamecounter1 = 1;
+						foreach($_order->getAllVisibleItems() as $itemname1){
+							//echo $itemsnamecounter1;
+							if($itemname1->getQtyOrdered() > $itemname1->getQtyShipped()){
+								echo  '<p id="'.$itemname1->getId().'">' . trim($itemname1->getName()) . '</p>';
+							}
+							$itemsnamecounter1++;
+						}
+					?>
+					</div>
+				</div>
+				<div class="text_short">
+					<label>Items Price</label><input type="text" id="mylerz_shipment_info_items_subtotal" name="mylerz_shipment_info_items_subtotal" disabled="disabled" style="width: 165px; float: left;" value="<?php echo $_order->getBaseSubtotal(); ?>" /><div style="float: left; padding-left: 5px;"><?php echo $_order->getData('base_currency_code'); ?></div>
+				</div>
+				<?php if($payment->getData('method') == 'ig_cashondelivery'){ ?>
+				<?php if($supplier_different){ ?>
+				<div class="text_short">
+					<label>Shipping Charges</label><input type="text" id="mylerz_shipment_info_shipping_charges" name="mylerz_shipment_info_shipping_charges" style="width: 165px; float: left;" value="" /><div style="float: left; padding-left: 5px;"><?php echo $_order->getData('base_currency_code'); ?></div>
+				</div>
+				<?php
+					} else {
+						if($atleast_item_shipped){
+				?>
+				<div class="text_short">
+					<label>Shipping Charges</label><input type="text" id="mylerz_shipment_info_shipping_charges" name="mylerz_shipment_info_shipping_charges" style="width: 165px; float: left;" value="" /><div style="float: left; padding-left: 5px;"><?php echo $_order->getData('base_currency_code'); ?></div>
+				</div>
+				<?php
+						} else {
+				?>
+				<div class="text_short">
+					<label>Shipping Charges</label><input type="text" id="mylerz_shipment_info_shipping_charges" name="mylerz_shipment_info_shipping_charges" style="width: 165px; float: left;" value="<?php echo $_order->getData('base_shipping_amount'); ?>" /><div style="float: left; padding-left: 5px;"><?php echo $_order->getData('base_currency_code'); ?></div>
+				</div>
+				<?php
+						}
+					}
+				?>
+				<div class="text_short">
+				   <?php $cod_value = $_order->getData('base_shipping_amount')+$_order->getBaseSubtotal();
+                        
+				   ?>
+				   
+					<label>COD Value</label><input type="text" id="mylerz_shipment_info_cod_value" name="mylerz_shipment_info_cod_value" style="width: 165px; float: left;" value="<?php echo $cod_value;?>" /><div style="float: left; padding-left: 5px;"><?php echo $_order->getData('base_currency_code'); ?></div>
+				</div>
+				<?php } ?>
+			</div>
+			<div id="shipment_infromation2" class="mylerz_shipment_creation_part">
+				<div class="text_short" id="mylerz_shipment_info_items">
+					<div >
+					<?php	if($itemscount != 0){?>
+					<div style="margin-bottom: -15px;">Items not shipped yet</div>
+					<br />
+					<table id="mylerz_items_table">
+						<tr>
+							<th class="mylerz_item_options">Action</th>
+							<th class="mylerz_item_name">Name</th>
+							<th class="mylerz_item_qty">Qty</th>
+						</tr>
+					<?php
+							foreach($itemsv as $item){
+								if($item->getQtyOrdered() > $item->getQtyShipped() or $isShipped){
+					?>
+						<tr id="item<?php echo $item->getId(); ?>" class="mylerz_item_tobe_shipped">
+							<td class="mylerz_item_options">
+								<a href="javascript:mylerzhide('<?php echo $item->getId(); ?>', '<?php echo $item->getBasePrice() * $item->getQtyOrdered(); ?>', '<?php echo ($item->getWeight() * $item->getQtyOrdered()) ?>');">Remove</a>
+							</td>
+							<?php
+								$_qty=abs($item->getQtyOrdered() - $item->getQtyShipped());
+								if($_qty==0 and $isShipped){
+									$_qty=intval($item->getQtyShipped());
+								}
+							?>
+							<td class="mylerz_item_name">
+								<span title="<?php echo $item->getName(); ?>"><?php echo substr($item->getName(), 0, 21); ?> ...</span>
+								<input type="hidden" id="mylerz_items_<?php echo $item->getId(); ?>" name="mylerz_items[<?php echo $item->getId(); ?>]" value="<?php echo $_qty; ?>" />
+							</td>
+							<td class="mylerz_item_qty">
+								<input class="mylerz_input_items_qty" type="text" name="<?php echo $item->getId(); ?>" value="<?php echo $_qty; ?>" />
+
+								<input type="hidden" id="mylerz_items_base_price_<?php echo $item->getId(); ?>" name="mylerz_items_base_price_<?php echo $item->getId(); ?>" value="<?php echo $item->getBasePrice() ?>" />
+								<input type="hidden" id="mylerz_items_base_weight_<?php echo $item->getId(); ?>" name="mylerz_items_base_weight_<?php echo $item->getId(); ?>" value="<?php echo $item->getWeight() ?>" />
+								<input type="hidden" id="mylerz_items_total_<?php echo $item->getId(); ?>" name="mylerz_items_total_<?php echo $item->getId(); ?>" value="<?php echo $_qty; ?>" />
+
+							</td>
+						</tr>
+					<?php
+								}
+							}
+					?>
+						<tr>
+							<td colspan="2" style="font-weight: bold;background: none repeat scroll 0% 0% rgb(224, 224, 224);">Number of items to be shipped:</td>
+							<td>
+								<span id="items_tobe_shipped_number">
+								<?php echo $itemscount; ?>
+								</span>
+							</td>
+						</tr>
+					</table>
+					<?php } else { ?>
+						<div style="color: green; width: 200px; margin: 0pt auto;">All items have been shipped</div>
+					<?php } ?>
+					</div>
+				</div>
+			</div>
+			<div class="mylerz_clearer"></div>
+		</FIELDSET>
+		<div class="mylerz_clearer"></div>
+
+		<div style="float: right; width: 100%; width: 30px;"><div style="float: right;font-size: 11px;height: 30px;margin-bottom: 6px;width: 184px;"><input  style="float: left; width: 30px;" type="checkbox" name="mylerz_email_customer" value="yes" /> <span style="float: left; margin-top: -2px;">Notify customer by email</span></div></div>
+		<div class="mylerz_clearer"></div>
+		<div style="float: right;margin-bottom: 20px;margin-top: -11px;">
+		    <?php if($_order->canShip()):?>
+			      <input name="mylerz_return_shipment_creation_date" type="hidden" value="create" />
+				<button id="mylerz_shipment_creation_submit_id" type="submit" name="mylerz_shipment_creation_submit" >Create Shipment</button>
+			<?php endif; ?>
+			
+			<?php
+
+				$shipments = Mage::getResourceModel('sales/order_shipment_collection')
+				->addAttributeToSelect('*')	
+				->addFieldToFilter("order_id",$_order->getId())->join("sales/shipment_comment",'main_table.entity_id=parent_id','comment')->addFieldToFilter('comment', array('like'=>"%{$_order->getIncrementId()}%"))->load();
+				
+				$mylerz_return_button = false;
+								
+				if($shipments->count()){
+					foreach($shipments as $key=>$comment){
+						if (version_compare(PHP_VERSION, '5.3.0') <= 0) {
+							$awbno=substr($comment->getComment(),0, strpos($comment->getComment(),"- Order No")); 
+						}
+						else{				
+							$awbno=strstr($comment->getComment(),"- Order No",true);
+						}
+						$awbno=trim($awbno,"AWB No.");					
+						break;
+					}
+					if((int) $awbno)
+						$mylerz_return_button = true;
+				}
+				
+				if(!$_order->canShip() && $mylerz_return_button){
+					
+			?>
+			    <input name="mylerz_return_shipment_creation_date" type="hidden" value="return" />
+				<button id="mylerz_return_shipment_creation_submit_id" type="submit" name="mylerz_return_shipment_creation_submit_id">Return Order</button>
+				<script>
+				var jccc = jQuery.noConflict();
+				  	jccc(function(){					
+						jccc("#mylerz_shipment_info_billing_account_id").val(2);
+						jccc("#mylerz_shipment_info_billing_account_id").trigger('change');
+                    });					
+				</script>
+			<?php } ?>
+			
+			<button onclick="mylerzclose()" type="button">Close</button>
+		</div>
+	</form>
+</div>
+</div>
+
+<?php 
+//   $allowed_domestic_methods =   explode(',', Mage::getStoreConfig('mylerzsettings/config/allowed_domestic_methods'));
+//   $allowed_international_methods =  explode(',', Mage::getStoreConfig('mylerzsettings/config/allowed_international_methods'));
+
+?>
+
+<script src="https://code.jquery.com/ui/1.10.0/jquery-ui.js"></script>
+<link rel="stylesheet" href="https://code.jquery.com/ui/1.10.0/themes/base/jquery-ui.css" />
+<script type="text/javascript" src="https://ajax.aspnetcdn.com/ajax/jquery.validate/1.10.0/jquery.validate.min.js"></script>
+
+<script>
+	var jccc = jQuery.noConflict();
+
+	
+	var _cities = {
+					"Cairo" : 
+					[
+						{"value" : "AS","label" : "Ain Shams"},
+						{"value" : "Al-S","label" : "Al Salam"},
+						{"value" : "El-M","label" : "El Marg"},
+						{"value" : "HEl","label" : "Heliopolis"},
+						{"value" : "Nozha","label" : "Nozha"},
+						{"value" : "Nasr City","label" : "Nasr City"},
+						{"value" : "Zamalek","label" : "Zamalek"},
+						{"value" : "El-Azbakia","label" : "El Azbakia"},
+						{"value" : "El-Mosky","label" : "El Mosky"},
+						{"value" : "El-Waily","label" : "El Waily"},
+						{"value" : "Abdeen","label" : "Abdeen"},
+						{"value" : "Bab El-Shaeria","label" : "Bab El Shaeria"},
+						{"value" : "El-Gamalia","label" : "El Gamalia"},
+						{"value" : "Boulak","label" : "Boulak"},
+						{"value" : "Qasr elneil","label" : "Qasr elneil"},
+						{"value" : "ELdarb Elahmar","label" : "ELdarb Elahmar"},
+						{"value" : "Badr City","label" : "Badr City"},
+						{"value" : "Basateen","label" : "Basateen"},
+						{"value" : "Elsayeda Zeinab","label" : "Elsayeda Zeinab"},
+						{"value" : "Hadayek El Qobah","label" : "Hadayek El Qobah"},
+						{"value" : "15th of May","label" : "15th of May"},
+						{"value" : "Helwan","label" : "Helwan"},
+						{"value" : "Eltebeen","label" : "Eltebeen"},
+						{"value" : "Maadi","label" : "Maadi"},
+						{"value" : "Madinaty","label" : "Madinaty"},
+						{"value" : "Manial","label" : "Manial"},
+						{"value" : "Masr El Qadeema","label" : "Masr El Qadeema"},
+						{"value" : "New Cairo","label" : "New Cairo"},
+						{"value" : "El Shorouk","label" : "El Shorouk"},
+						{"value" : "Shoubra","label" : "Shoubra"},
+						{"value" : "Zeitoun","label" : "Zeitoun"},
+						{"value" : "AMRY","label" : "Al Amiriyyah"},
+						{"value" : "ABAG","label" : "Al Abageyah"},
+						{"value" : "TURA","label" : "Tura"},
+						{"value" : "HWMD","label" : "El Hawamdeyya"},
+						{"value" : "BDRA","label" : "Al Badrashin"},
+						{"value" : "HDBA","label" : "El Hadba EL wosta"},
+						{"value" : "AYAT","label" : "Al Ayat"},
+						{"value" : "SAF","label" : "El Saf"},
+						{"value" : "GHMR","label" : "Ghamra"},
+						{"value" : "ZAHR","label" : "El Zaher"},
+						{"value" : "ABAS","label" : "Abbaseya"},
+						{"value" : "SHRB","label" : "Al Sharabiya"},
+						{"value" : "FRAG","label" : "Rod El Farag"},
+						{"value" : "KHSU","label" : "Al Khusus"},
+						{"value" : "ZWYA","label" : "El Zawya El Hamra"},
+						{"value" : "KHM1","label" : "Awal Shubra Al Kheimah"},
+						{"value" : "KHM2","label" : "Shubra El Kheima 2"},
+						{"value" : "FUTR","label" : "Future City"},
+						{"value" : "NHEL","label" : "New Heliopolis City"},
+						{"value" : "OBOR","label" : "El Obour City"},
+						{"value" : "RMDN","label" : "10th of Ramadan"},
+						{"value" : "ESHA","label" : "Elsayeda Aisha"},
+						{"value" : "NKHL","label" : "Izbat an Nakhl"}
+					],
+					"Giza" : 
+					[
+						{"value" : "LWAA","label" : "Ard El Lewa"},
+						{"value" : "BRAG","label" : "Al Baragel"},
+						{"value" : "MOTM","label" : "Al Moatamadeyah"},
+						{"value" : "KFRH","label" : "Kafr Hakim"},
+						{"value" : "OSIM","label" : "Ossim"},
+						{"value" : "GIZA","label" : "El Giza"},
+						{"value" : "MUNB","label" : "Al Munib"},
+						{"value" : "MEKI","label" : "Saqiyet Mekki"},
+						{"value" : "NMRS","label" : "Abu an Numros"},
+						{"value" : "MANT","label" : "Shubra Ment"},
+						{"value" : "MNWT","label" : "Al Manawat"},
+						{"value" : "SMAN","label" : "Nazlet El Semman"},
+						{"value" : "BTRN","label" : "Nazlet Al Batran"},
+						{"value" : "TLBA","label" : "El Talbia"},
+						{"value" : "TRMS","label" : "Kafr Tuhurmis"},
+						{"value" : "NASR","label" : "Kafr Nassar"},
+						{"value" : "RWSH","label" : "Abou Rawash"},
+						{"value" : "Agouza","label" : "Agouza"},
+						{"value" : "Dokki","label" : "Dokki"},
+						{"value" : "Boulak Eldakrour","label" : "Boulak Eldakrour"},
+						{"value" : "Hadayek Al Ahram","label" : "Hadayek Al Ahram"},
+						{"value" : "Haram","label" : "Haram"},
+						{"value" : "Imbaba","label" : "Imbaba"},
+						{"value" : "Mohandseen","label" : "Mohandseen"},
+						{"value" : "Nahia","label" : "Nahia"},
+						{"value" : "6th of Oct","label" : "6th of Oct"},
+						{"value" : "Sheikh Zayed","label" : "Sheikh Zayed"},
+						{"value" : "Omraneya","label" : "Omraneya"},
+						{"value" : "Saft El Laban","label" : "Saft El Laban"},
+						{"value" : "Warraq","label" : "Warraq"}
+					],
+					"Alexandria" : 
+					[
+						{"value" : "Alexandria","label" : "Alexandria"}
+					],
+					"Asyut" : 
+					[
+						{"value" : "ASYT","label" : "Asyut"}
+					],
+					"Aswan" : 
+					[
+						{"value" : "ASWN","label" : "Aswan"}
+					],
+					"Beheira" : 
+					[
+						{"value" : "BEHR","label" : "Beheira"}
+					],
+					"Beni Suef" : 
+					[
+						{"value" : "BENS","label" : "Beni Suef"}
+					],
+					"Dakahlia" : 
+					[
+						{"value" : "DAKH","label" : "Dakahlia"}
+					],
+					"Damietta" : 
+					[
+						{"value" : "DAMT","label" : "Damietta"}
+					],
+					"Faiyum" : 
+					[
+						{"value" : "FAYM","label" : "Faiyum"}
+					],
+					"Gharbia" : 
+					[
+						{"value" : "GHRB","label" : "Gharbia"}
+					],
+					"Ismailia" : 
+					[
+						{"value" : "ISML","label" : "Ismailia"}
+					],
+					"Kafr El Sheikh" : 
+					[
+						{"value" : "SHKH","label" : "Kafr El Sheikh"}
+					],
+					"Luxor" : 
+					[
+						{"value" : "LUXR","label" : "Luxor"}
+					],
+					"Matruh" : 
+					[
+						{"value" : "MTRH","label" : "Matruh"}
+					],
+					"Minya" : 
+					[
+						{"value" : "MNYA","label" : "Minya"}
+					],
+					"Monufia" : 
+					[
+						{"value" : "MONF","label" : "Monufia"}
+					],
+					"El Wadi el Gedid" : 
+					[
+						{"value" : "WADI","label" : "El Wadi el Gedid"}
+					],
+					"North Sinai" : 
+					[
+						{"value" : "NSNA","label" : "North Sinai"}
+					],
+					"Port Said" : 
+					[
+						{"value" : "PORS","label" : "Port Said"}
+					],
+					"Qalyubia" : 
+					[
+						{"value" : "QLYB","label" : "Qalyubia"}
+					],
+					"Qena" : 
+					[
+						{"value" : "QENA","label" : "Qena"}
+					],
+					"El Bahr El Ahmar" : 
+					[
+						{"value" : "REDS","label" : "El Bahr El Ahmar"}
+					],
+					"Sharqia" : 
+					[
+						{"value" : "SHRK","label" : "Sharqia"}
+					],
+					"Sohag" : 
+					[
+						{"value" : "SOHG","label" : "Sohag"}
+					],
+					"South Sinai" : 
+					[
+						{"value" : "SSINA","label" : "South Sinai"}
+					],
+					"Suez" : 
+					[
+						{"value" : "SUEZ","label" : "Suez"}
+					],
+				};
+
+		var updateSelectNeighborhood = function(city) {
+			console.log('updating with', city);
+			var listItems= "";
+			for (var i = 0; i < _cities[city].length; i++){
+				listItems+= "<option value='" + _cities[city][i].value + "'>" + _cities[city][i].label + "</option>";
+			}
+			jccc("select#mylerz_shipment_receiver_state").html(listItems);
+		}
+		
+		jccc("select#mylerz_shipment_shipper_city").on('change',function(){
+			var selectedCity = jccc('#mylerz_shipment_shipper_city option:selected').text();
+			updateSelectNeighborhood(selectedCity);
+		});
+
+	updateSelectNeighborhood(jccc('#mylerz_shipment_shipper_city option:selected').text());
+
+	var mylerz_shipment_receiver_name = document.getElementById('mylerz_shipment_receiver_name').value;
+	var mylerz_shipment_receiver_email = document.getElementById('mylerz_shipment_receiver_email').value;
+	var mylerz_shipment_receiver_company = document.getElementById('mylerz_shipment_receiver_company').value;
+	var mylerz_shipment_receiver_street = document.getElementById('mylerz_shipment_receiver_street').value;
+	var mylerz_shipment_receiver_country = document.getElementById('mylerz_shipment_receiver_country').value;
+	var mylerz_shipment_receiver_city = document.getElementById('mylerz_shipment_receiver_city').value;
+	var mylerz_shipment_receiver_postal = document.getElementById('mylerz_shipment_receiver_postal').value;
+	var mylerz_shipment_receiver_state = document.getElementById('mylerz_shipment_receiver_state').value;
+	var mylerz_shipment_receiver_phone = document.getElementById('mylerz_shipment_receiver_phone').value;
+
+	function mylerzpop(itemscount)
+	{		
+		if(itemscount >= 0){
+			jccc("#mylerz_overlay").css("display", "block");
+			jccc("#mylerz_shipment_creation").fadeIn(1000);
+		}
+		else{
+			alert('Cannot create a shipment, all items have been shipped');
+		}
+
+	}
+
+	function mylerzclose()
+	{
+		jccc("#mylerz_overlay").css("display", "none");
+		jccc("#mylerz_shipment_creation").fadeOut(500);
+	}
+
+	function mylerzhide(mylerzid, item_price, order_total_weight)
+	{
+
+		if(jccc(".mylerz_item_tobe_shipped").length > 1){			
+			jccc("#order-total-weight").html((parseFloat(jccc("#order-total-weight").html()) - parseFloat(order_total_weight)).toFixed(2));
+			jccc("#order_weight").val((parseFloat(jccc("#order-total-weight").html()) - parseFloat(order_total_weight)).toFixed(2));
+
+			jccc("input[name=mylerz_shipment_info_items_subtotal]").val((parseFloat(jccc("input[name=mylerz_shipment_info_items_subtotal]").val())-parseFloat(item_price)).toFixed(2));
+
+			//new
+			jccc('#mylerz_shipment_info_cod_amount').val((parseFloat(jccc('#mylerz_shipment_info_cod_amount').val()) - parseFloat(parseInt(jccc("input[name="+ mylerzid +"]").val()) * parseFloat(jccc('#mylerz_items_base_price_'+mylerzid).val()))).toFixed(2));
+
+			jccc("#item"+mylerzid).css('background', '#F2C2C8');
+			jccc("#item"+mylerzid).fadeOut(500);
+			jccc("#item"+mylerzid+" input").val(0);
+			jccc("#item"+mylerzid).remove();
+			jccc("#"+mylerzid).remove();
+			jccc("textarea[name=mylerz_shipment_description]").text(jccc("#mylerz_shipment_description_div").text());
+			get_tobe_shipped_items_number();
+		} else {
+			alert('At least one item is needed to create a shipment.');
+		}
+	}
+
+	function get_tobe_shipped_items_number()
+	{
+		items_tobe_shipped_number = 0;
+		jccc("#mylerz_items_table .mylerz_input_items_qty").each(function(qty_index){
+				items_tobe_shipped_number += parseFloat(jccc(this).val());
+		});
+		//items_tobe_shipped_number = jccc(".mylerz_item_tobe_shipped").length;
+		jccc("#items_tobe_shipped_number").html(items_tobe_shipped_number);
+	}
+
+	var codTotal = jccc("#mylerz_shipment_info_cod_amount").val();
+
+	jccc(".mylerz_input_items_qty").keyup(function(){
+		var the_id = jccc(this).attr('name');
+		var items_price = 0;
+
+		var itemWeight = 0;
+		var itemTotalPrice = 0;
+
+		jccc("#mylerz_items_"+the_id).val(jccc(this).val());
+		jccc(".mylerz_input_items_qty").each(function(price_index){
+			var the_id_qty = jccc(this).attr('name');//alert(the_id_qty);
+			items_price += jccc(this).val() * jccc("#mylerz_items_base_price_"+the_id_qty).val();
+
+			itemWeight += jccc(this).val() * jccc("#mylerz_items_base_weight_"+the_id_qty).val();
+			itemTotalPrice += (parseInt(jccc("#mylerz_items_total_"+the_id_qty).val()) - parseInt(jccc(this).val())) * jccc("#mylerz_items_base_price_"+the_id_qty).val();
+
+		});
+
+		//jccc("input[name=mylerz_shipment_info_items_subtotal]").val(items_price);
+
+		jccc("input[name=mylerz_shipment_info_items_subtotal]").val(items_price.toFixed(2));
+		jccc("#order-total-weight").html(itemWeight.toFixed(2));
+
+		if(itemTotalPrice){
+			jccc("#mylerz_shipment_info_cod_amount").val((parseFloat('<?php echo round($_order->getData('grand_total'), 2) ?>') - parseFloat(itemTotalPrice)).toFixed(2));
+		}
+		else if(itemTotalPrice == 0){
+			jccc("#mylerz_shipment_info_cod_amount").val(codTotal);
+		}
+
+		jccc("input[name=mylerz_shipment_info_cod_value]").val(parseFloat(items_price) + parseFloat(jccc("input[name=mylerz_shipment_info_shipping_charges]").val()));
+		get_tobe_shipped_items_number();
+	});
+
+	var messages_content;
+<?php
+	if(Mage::app()->getRequest()->getParam('mylerzpopup') == 'show'){
+	?>
+		mylerzpop(1);
+		jccc("#messages").ready(function(){
+			jccc("#mylerz_messages").html(jccc("#messages").html());
+		});
+	<?php
+	}
+?>
+
+	jccc("input[name=mylerz_shipment_info_shipping_charges]").change(function(){
+		var cod_value = parseFloat(jccc("input[name=mylerz_shipment_info_shipping_charges]").val()) + parseFloat(jccc("input[name=mylerz_shipment_info_items_subtotal]").val());
+		jccc("input[name=mylerz_shipment_info_cod_value]").val(cod_value);
+	});
+
+	jccc(".mylerz_all_options").change(function(){
+
+	});
+
+	jccc("#mylerz_shipment_info_product_group_div").html(jccc("select[name=mylerz_shipment_info_product_group] option:selected").text());
+	jccc("#mylerz_shipment_info_service_type_div").html(jccc("select[name=mylerz_shipment_info_service_type] option:selected").text());
+	jccc("#mylerz_shipment_info_additional_services_div").html(jccc("select[name=mylerz_shipment_info_additional_services] option:selected").text());
+
+	jccc(document).ready(function(){
+		if((jccc('#mylerz_messages').html() != "") && (jccc('.error-msg'))){
+			jccc("#mylerz_overlay").css("display", "block");
+			jccc("#mylerz_shipment_creation").fadeIn(1000);
+		}
+
+		jccc(function() {
+			//jccc( "#datepicker" ).datepicker();
+			jccc( "#mylerz_shipment_info_pickup_date" ).datepicker({ dateFormat: "yy-mm-dd" });
+			jccc( "#mylerz_shipment_info_ready_time" ).datepicker({ dateFormat: "yy-mm-dd" });
+			jccc( "#mylerz_shipment_info_last_pickup_time" ).datepicker({ dateFormat: "yy-mm-dd" });
+			jccc( "#mylerz_shipment_info_closing_time" ).datepicker({ dateFormat: "yy-mm-dd" });
+			});
+
+		jccc('#filereset').click(function(){
+			jccc("#file1_div").html(jccc("#file1_div").html());
+			});
+		jccc('#file2reset').click(function(){
+			jccc("#file2_div").html(jccc("#file2_div").html());
+			});
+		jccc('#file3reset').click(function(){
+			jccc("#file3_div").html(jccc("#file3_div").html());
+			});
+		jccc("#mylerz_shipment").validate();
+
+	});
+		
+		// jQuery("#mylerz_shipment_info_product_type").chained("#mylerz_shipment_info_product_group");
+		// jQuery("#mylerz_shipment_info_service_type").chained("#mylerz_shipment_info_product_group");
+
+</script>
+<?php $formSession->unsetData('form_data')?>

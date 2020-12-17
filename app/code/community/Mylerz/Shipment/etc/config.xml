@@ -1,0 +1,189 @@
+<?xml version="1.0"?>
+<config>
+	<modules>
+		<Mylerz_Shipment>
+			<version>0.1.0</version>
+		</Mylerz_Shipment>
+	</modules>
+	<global>
+		<helpers>
+			<mylerz_shipment>
+				<class>Mylerz_Shipment_Helper</class>
+			</mylerz_shipment>
+		</helpers>
+		<blocks>
+			<mylerz_shipment>
+				<class>Mylerz_Shipment_Block</class>
+			</mylerz_shipment>
+		</blocks>
+		<models>
+			<mylerz_shipment>
+				<class>Mylerz_Shipment_Model</class>
+				<resourceModel>mylerz_shipment_mysql4</resourceModel>
+			</mylerz_shipment>
+			<mylerz_shipment_mysql4>
+                <class>Mylerz_Shipment_Model_Mysql4</class>
+                <entities>
+                    <mylerzneighborhood>
+                        <table>mylerz_neighborhood</table>
+                    </mylerzneighborhood>
+                </entities>
+            </mylerz_shipment_mysql4>
+		</models>
+		<resources>
+			<mylerz_shipment_setup>
+				<setup>
+                    <module>Mylerz_Shipment</module>
+                </setup>
+				<connection>
+                    <use>core_setup</use>
+                </connection>
+			</mylerz_shipment_setup>
+			<mylerz_shipment_write>
+                <connection>
+                    <use>core_write</use>
+                </connection>
+            </mylerz_shipment_write>
+            <mylerz_shipment_read>
+                <connection>
+                    <use>core_read</use>
+                </connection>
+            </mylerz_shipment_read>
+		</resources>
+		<events>
+			<!-- Before rendering event -->
+            <core_block_abstract_prepare_layout_before>
+                <observers>
+                    <mylerz_adminhtml_block_grid_html_before_handler>
+                        <type>model</type>
+                        <class>mylerz_shipment/observer</class>
+                        <method>addMassCreateShipment</method>
+                    </mylerz_adminhtml_block_grid_html_before_handler>
+                </observers>
+            </core_block_abstract_prepare_layout_before>
+			<adminhtml_block_html_before>				<!-- identifier of the event we want to catch -->
+				<observers>
+					<mylerz_adminhtml_block_html_before_handler>						<!-- identifier of the event handler -->
+						<type>model</type>						<!-- class method call type; valid are model, object and singleton -->
+						<class>mylerz_shipment/observer</class>						<!-- observers class alias -->
+						<method>adminhtmlBlockHtmlBefore</method>						<!-- observer's method to be called -->
+						<args></args>						<!-- additional arguments passed to observer -->
+					</mylerz_adminhtml_block_html_before_handler>
+				</observers>
+			</adminhtml_block_html_before>
+			<!--     for add add mylerz awb  to orders collection    -->
+			<sales_order_grid_collection_load_before>
+				<observers>
+					<mylerz_shipment_sales_order_before_handler>
+						<type>model</type>
+						<class>mylerz_shipment/observer</class>
+						<method>GetMylerzShipmentAWB</method>
+						<args></args>
+					</mylerz_shipment_sales_order_before_handler>
+				</observers>
+			</sales_order_grid_collection_load_before>
+			<!--     for add add mylerz awb column in orders grid    -->
+			<core_block_abstract_to_html_before>
+				<observers>
+					<mylerz_shipment_sales_order_before_to_html_handler>
+						<type>singleton</type>
+						<class>mylerz_shipment/observer</class>
+						<method>addColumnToSalesOrderGrid</method>
+					</mylerz_shipment_sales_order_before_to_html_handler>
+				</observers>
+			</core_block_abstract_to_html_before>
+		</events>
+	</global>
+	<admin>
+		<routers>
+			<mylerz_shipment>
+				<use>admin</use>
+				<args>
+					<module>Mylerz_Shipment</module>
+					<frontName>admin_mylerz</frontName>
+				</args>
+			</mylerz_shipment>
+		</routers>
+	</admin>
+	<adminhtml>
+		<menu>
+			<cms>
+				<children>
+					<mylerzneighborhood module="mylerz_shipment">
+						<title>Mylerz Areas</title>
+						<sort_order>100</sort_order>
+						<action>admin_mylerz/adminhtml_neighborhoods</action>admin_mylerz_shipment
+					</mylerzneighborhood>
+				</children>
+			</cms>
+		</menu>
+		<acl>
+			<resources>
+				<admin>
+					<children>
+						<cms>
+							<children>
+								<mylerzneighborhood>
+									<title>Mylerz Areas</title>
+									<sort_order>550</sort_order>
+								</mylerzneighborhood>
+							</children>
+						</cms>
+					</children>
+				</admin>
+			</resources>
+		</acl>
+		<!-- <menu>
+			<shipment module="shipment">
+				<title>Shipment</title>
+				<sort_order>100</sort_order>
+				<children>
+					<shipmentbackend module="shipment">
+						<title>Backend Page Title</title>
+						<sort_order>0</sort_order>
+						<action>admin_shipment/adminhtml_shipmentbackend</action>
+					</shipmentbackend>
+				</children>
+			</shipment>
+		</menu>
+		<acl>
+			<resources>
+				<all>
+					<title>Allow Everything</title>
+				</all>
+				<admin>
+					<children>
+						<shipment translate="title" module="shipment">
+							<title>Shipment</title>
+							<sort_order>1000</sort_order>
+							<children>
+								<shipmentbackend translate="title">
+									<title>Backend Page Title</title>
+								</shipmentbackend>
+							</children>
+						</shipment>
+					</children>
+				</admin>
+			</resources>
+		</acl> -->
+		<layout>
+			<updates>
+				<mylerz_shipment>
+					<file>mylerz_shipment.xml</file>
+				</mylerz_shipment>
+			</updates>
+		</layout>
+	</adminhtml>
+	<default>
+		<carriers>
+			<mylerz>
+				<active>1</active>
+				<model>mylerz_shipment/carrier_mylerz</model>
+				<name>mylerz</name>
+				<title>Mylerz</title>
+				<description>Mylerz introduces a fast same day delivery through the use of unmatched technologies to ensure transfer of parcels from one entity to the other in a window of 2 to 8 hours</description>
+				<sort_order>0</sort_order>
+			</mylerz>
+		</carriers>
+	</default>
+</config>
